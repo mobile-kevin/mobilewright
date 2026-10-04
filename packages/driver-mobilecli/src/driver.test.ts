@@ -536,9 +536,31 @@ test.describe('terminateApp() on an iOS simulator when simctl finds nothing to t
     await expect(driver.terminateApp('com.example.app')).rejects.toThrow('exit status 1');
   });
 
-  test('a real device keeps its own error message', async () => {
-    const driver = createDriverWithSession({ platform: 'ios', deviceType: 'real' });
-    (driver as any).session.rpc.call = async () => { throw new Error('failed to terminate app on device real: process of com.example.app not found'); };
-    await expect(driver.terminateApp('com.example.app')).rejects.toThrow('process of com.example.app not found');
+});
+
+// Stopping an app that is not running is not an error on any device type:
+// Android already succeeds silently, the simulator case is handled above, and
+// a real iOS device answers "process of X not found" — which is the same
+// outcome. A bundle that is not installed stays an error.
+test.describe('terminateApp() when the app is not running', () => {
+  function driverRejectingWith(message: string, deviceType: 'real' | 'simulator' = 'real'): MobilecliDriver {
+    const driver = createDriverWithSession({ platform: 'ios', deviceType });
+    (driver as any).session.rpc.call = async () => { throw new Error(message); };
+    return driver;
+  }
+
+  test('a real device reporting "process not found" resolves', async () => {
+    const driver = driverRejectingWith('failed to terminate app on device real: process of com.example.app not found');
+    await expect(driver.terminateApp('com.example.app')).resolves.toBeUndefined();
+  });
+
+  test('a bundle that is not installed is still an error', async () => {
+    const driver = driverRejectingWith('failed to terminate app on device real: com.example.app not installed');
+    await expect(driver.terminateApp('com.example.app')).rejects.toThrow('com.example.app not installed');
+  });
+
+  test('other failures are still reported', async () => {
+    const driver = driverRejectingWith('failed to terminate app on device real: kill process failed: boom');
+    await expect(driver.terminateApp('com.example.app')).rejects.toThrow('kill process failed');
   });
 });

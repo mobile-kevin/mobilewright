@@ -199,6 +199,12 @@ function assertValidZipFile(path: string): void {
 
 const debug = createDebug('mw:driver-mobilecli');
 
+/** mobilecli's real-device answer when the app to terminate has no running process. */
+function isProcessNotFound(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /process of \S+ not found$/.test(message);
+}
+
 /**
  * A WebViewSession backed by mobilecli's device.webview.* RPC methods.
  * Bound to a single webview `id`; the deviceId is injected by the caller.
@@ -638,6 +644,12 @@ export class MobilecliDriver implements MobilewrightSession, DeviceAllocator {
     try {
       await this.call('device.apps.terminate', { bundleId });
     } catch (error) {
+      // Stopping an app that is not running is not an error on any device
+      // type. A real iOS device says so explicitly; Android succeeds silently.
+      if (isProcessNotFound(error)) {
+        debug('%s was not running', bundleId);
+        return;
+      }
       if (!this.isSimctlNothingToTerminate(error)) {
         throw error;
       }
