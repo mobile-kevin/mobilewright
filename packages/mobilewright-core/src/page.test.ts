@@ -272,6 +272,23 @@ test.describe('expect(page).toHaveURL()', () => {
       await expect(page).not.toHaveURL(/login/, { timeout: 1_000 });
     });
 
+    // A failed read must not count as "the URL is empty": a negated assertion
+    // would then pass without ever observing the page.
+    test('not.toHaveURL does not pass while the URL cannot be read', async () => {
+      const base = fakeWebViewSession({ url: 'https://example.com/login' }).session;
+      const session = { ...base, url: async (): Promise<string> => { throw new Error('webview gone'); } };
+      const page = await Page.attach({ ...base, url: async () => 'https://example.com/login' });
+      (page as any).session = session;
+      await playwrightExpect(expect(page).not.toHaveURL(/login/, { timeout: 500 })).rejects.toThrow(/webview gone/);
+    });
+
+    test('not.toHaveTitle does not pass while the title cannot be read', async () => {
+      const base = fakeWebViewSession({ url: 'https://example.com/', title: 'Login' }).session;
+      const page = await Page.attach(base);
+      (page as any).session = { ...base, title: async (): Promise<string> => { throw new Error('webview gone'); } };
+      await playwrightExpect(expect(page).not.toHaveTitle('Login', { timeout: 500 })).rejects.toThrow(/webview gone/);
+    });
+
     test('page.url() reflects the URL the assertion observed', async () => {
       const { session, navigateTo } = sessionWhoseUrlChanges('https://example.com/login');
       const page = await Page.attach(session);
