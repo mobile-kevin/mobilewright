@@ -405,7 +405,7 @@ test.describe('WebLocator.press()', () => {
 
   test('a printable key inserts the character through the native value setter', async () => {
     const js = await pressExpression('a');
-    playwrightExpect(js).toContain("'value')");
+    playwrightExpect(js).toContain('\'value\')');
     playwrightExpect(js).toContain('.set.call(el,');
   });
 
