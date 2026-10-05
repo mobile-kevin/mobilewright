@@ -549,9 +549,9 @@ test.describe('value readers wait for attachment, not visibility', () => {
     const evaluateCalls: string[] = [];
     const session: WebViewSession = {
       ...fakeWebViewSession().session,
-      evaluate: async <T,>(expr: string): Promise<T> => {
+      evaluate: async <T>(expr: string): Promise<T> => {
         evaluateCalls.push(expr);
-        if (expr.includes("elementState(el, 'visible')")) return false as T;
+        if (expr.includes('elementState(el, \'visible\')')) return false as T;
         if (expr.includes('el?.textContent')) return content.textContent as T;
         if (expr.includes('el?.innerText')) return content.innerText as T;
         if (expr.includes('el?.innerHTML')) return content.innerHTML as T;
