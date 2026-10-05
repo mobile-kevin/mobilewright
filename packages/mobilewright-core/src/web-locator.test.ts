@@ -402,9 +402,9 @@ test.describe('WebLocator.fill()', () => {
     const loc = new WebLocator(session, 'input');
     await loc.fill('user@example.com');
     const fillExpression = evaluateCalls.find(c => c.includes('user@example.com'))!;
-    playwrightExpect(fillExpression).toContain("Object.getOwnPropertyDescriptor(");
-    playwrightExpect(fillExpression).toContain("'value')");
-    playwrightExpect(fillExpression).toContain(".set.call(el,");
+    playwrightExpect(fillExpression).toContain('Object.getOwnPropertyDescriptor(');
+    playwrightExpect(fillExpression).toContain('\'value\')');
+    playwrightExpect(fillExpression).toContain('.set.call(el,');
   });
 
   test('type() appends through the native prototype setter as well', async () => {
@@ -412,8 +412,8 @@ test.describe('WebLocator.fill()', () => {
     const loc = new WebLocator(session, 'input');
     await loc.type('abc');
     const typeExpression = evaluateCalls.find(c => c.includes('abc'))!;
-    playwrightExpect(typeExpression).toContain("'value')");
-    playwrightExpect(typeExpression).toContain(".set.call(el,");
+    playwrightExpect(typeExpression).toContain('\'value\')');
+    playwrightExpect(typeExpression).toContain('.set.call(el,');
   });
 });
 

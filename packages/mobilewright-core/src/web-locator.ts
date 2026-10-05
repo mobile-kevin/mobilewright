@@ -58,9 +58,9 @@ function isStrictModeViolation(e: unknown): boolean {
 // elements have no value and take the text as content instead.
 function assignValueScript(newValueExpr: string): string {
   return `{ const next = ${newValueExpr}; `
-    + `if (el.isContentEditable) { el.textContent = next; } `
-    + `else { const desc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value'); `
-    + `if (desc && desc.set) { desc.set.call(el, next); } else { el.value = next; } } }`;
+    + 'if (el.isContentEditable) { el.textContent = next; } '
+    + 'else { const desc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), \'value\'); '
+    + 'if (desc && desc.set) { desc.set.call(el, next); } else { el.value = next; } } }';
 }
 
 export class MobileWebViewLocator {
