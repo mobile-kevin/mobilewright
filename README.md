@@ -1,4 +1,4 @@
-# Mobilewright
+# <img src="https://mobilewright.dev/mobilewright-logo.png" alt="" height="32"> Mobilewright
 
 [![npm](https://img.shields.io/npm/dm/mobilewright?style=flat-square&label=npm%20downloads)](https://www.npmjs.com/package/mobilewright)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square)](LICENSE)
@@ -9,6 +9,42 @@ Framework for mobile device automation, inspired by Playwright's architecture an
 **Mobilewright** targets iOS and Android devices, simulators, and emulators through a clean, auto-waiting API built on top of [mobilecli](https://github.com/mobile-next/mobilecli).
 
 [Get Started](#quick-start) · [API Docs](#api-reference) · [Roadmap](ROADMAP.md) · [Mobile Next Cloud](https://mobilenext.ai/cloud?utm_source=github&utm_medium=readme&utm_campaign=mobilewright&utm_content=hero)
+
+![One Mobilewright test running on an iPhone and an Android phone side by side](https://raw.githubusercontent.com/mobile-next/mobilewright/main/docs/src/images/cart-test.gif)
+
+## Quick Start
+
+```bash
+npm install mobilewright @mobilewright/test
+npx mobilewright init
+```
+
+```typescript
+import { test, expect } from '@mobilewright/test';
+
+test('can sign in', async ({ screen }) => {
+  await screen.getByLabel('Email').fill('user@example.com');
+  await screen.getByLabel('Password').fill('password123');
+  await screen.getByRole('button', { name: 'Sign In' }).tap();
+
+  await expect(screen.getByText('Welcome back')).toBeVisible();
+});
+```
+
+```bash
+npx mobilewright test
+```
+
+## Features
+
+- **Playwright-style API** — `screen.getByRole('button').tap()`, just like `page.getByRole('button').click()`
+- **Zero config** — auto-discovers booted simulators
+- **Cross-platform** — unified interface for iOS and Android
+- **Auto-waiting** — actions wait for elements to be visible, enabled, and stable before interacting
+- **Chainable locators** — `screen.getByType('Cell').getByLabel('Item 1')`
+- **Retry assertions** — `expect(locator).toBeVisible()` polls until satisfied or timeout
+- **Remote support** — connect to mobilecli on another machine for device lab setups
+- **Test fixtures** — `@mobilewright/test` extends Playwright Test with `screen` and `device` fixtures
 
 ## Why Mobilewright?
 
@@ -38,39 +74,6 @@ await expect(screen.getByText('Welcome')).toBeVisible();
 ```
 
 No XPath. No coordinates. No vision model. The agent reads the accessibility tree and acts on it directly.
-
-## Features
-
-- **Playwright-style API** — `screen.getByRole('button').tap()`, just like `page.getByRole('button').click()`
-- **Zero config** — auto-discovers booted simulators
-- **Cross-platform** — unified interface for iOS and Android
-- **Auto-waiting** — actions wait for elements to be visible, enabled, and stable before interacting
-- **Chainable locators** — `screen.getByType('Cell').getByLabel('Item 1')`
-- **Retry assertions** — `expect(locator).toBeVisible()` polls until satisfied or timeout
-- **Remote support** — connect to mobilecli on another machine for device lab setups
-- **Test fixtures** — `@mobilewright/test` extends Playwright Test with `screen` and `device` fixtures
-
-## Quick Start
-
-```bash
-npm install mobilewright
-```
-
-```typescript
-import { ios, expect } from 'mobilewright';
-
-const device = await ios.launch({ bundleId: 'com.example.myapp' });
-const { screen } = device;
-
-await screen.getByLabel('Email').fill('user@example.com');
-await screen.getByLabel('Password').fill('password123');
-await screen.getByRole('button', { name: 'Sign In' }).tap();
-
-await expect(screen.getByText('Welcome back')).toBeVisible();
-const screenshot = await screen.screenshot();
-
-await device.close();
-```
 
 ## Prerequisites
 
