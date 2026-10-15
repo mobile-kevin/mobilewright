@@ -543,5 +543,5 @@ test.describe('uninstallApp() when the app is not installed', () => {
 
 test('installApp() with a path that does not exist reports the path instead of a raw ENOENT', async () => {
   const driver = createDriverWithSession({ platform: 'android', deviceType: 'emulator' });
-  await expect(driver.installApp('/no/such/dir/app.apk')).rejects.toThrow('App file not found: /no/such/dir/app.apk');
+  await expect(driver.installApp('/no/such/dir/app.apk')).rejects.toThrow(`App file not found: ${resolve('/no/such/dir/app.apk')}`);
 });

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { writeFileSync, mkdtempSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   assertValidZipFile,
@@ -199,11 +199,11 @@ test.describe('resolveInstallAppPaths', () => {
   const configDir = '/projects/shop';
 
   test('resolves a relative path against the config directory', () => {
-    expect(resolveInstallAppPaths('./builds/app.zip', configDir)).toEqual(['/projects/shop/builds/app.zip']);
+    expect(resolveInstallAppPaths('./builds/app.zip', configDir)).toEqual([resolve('/projects/shop/builds/app.zip')]);
   });
 
   test('leaves an absolute path untouched', () => {
-    expect(resolveInstallAppPaths('/tmp/app.apk', configDir)).toEqual(['/tmp/app.apk']);
+    expect(resolveInstallAppPaths('/tmp/app.apk', configDir)).toEqual([resolve('/tmp/app.apk')]);
   });
 
   test('leaves a remote app reference untouched', () => {
@@ -212,7 +212,7 @@ test.describe('resolveInstallAppPaths', () => {
 
   test('resolves every entry of an array', () => {
     expect(resolveInstallAppPaths(['ios/App.zip', '/abs/other.apk'], configDir))
-      .toEqual(['/projects/shop/ios/App.zip', '/abs/other.apk']);
+      .toEqual([resolve('/projects/shop/ios/App.zip'), resolve('/abs/other.apk')]);
   });
 
   test('returns an empty list when nothing is configured', () => {
