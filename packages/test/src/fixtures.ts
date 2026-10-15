@@ -18,6 +18,7 @@ import { expect, setSoftFailureHandler, setDefaultStepFn } from '@mobilewright/c
 import type { Device, Screen, StepFn } from '@mobilewright/core';
 import {
   assertValidZipFile,
+  isRemoteAppReference,
   mergeDeviceConfig,
   assertSupportedPlatform,
   annotationsForDevice,
@@ -140,7 +141,9 @@ export const test = base.extend<MobilewrightTestFixtures>({
     const configDir = testInfo.config.configFile ? dirname(testInfo.config.configFile) : process.cwd();
     const appsToInstall = resolveInstallAppPaths(merged.installApps, configDir);
     for (const appPath of appsToInstall) {
-      assertValidZipFile(appPath);
+      if (!isRemoteAppReference(appPath)) {
+        assertValidZipFile(appPath);
+      }
     }
 
     const client = getClient();
@@ -151,6 +154,7 @@ export const test = base.extend<MobilewrightTestFixtures>({
       deviceId: merged.deviceId,
       deviceType: merged.deviceType,
       osVersion: merged.osVersion,
+      installApps: appsToInstall,
     }, allocationTimeoutFor(merged));
     debug('allocated device %s', handle.deviceId);
 

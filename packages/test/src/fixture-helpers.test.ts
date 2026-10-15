@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   assertValidZipFile,
+  isRemoteAppReference,
   mergeDeviceConfig,
   assertSupportedPlatform,
   annotationsForDevice,
@@ -21,6 +22,10 @@ function writeTempFile(name: string, bytes: Buffer): string {
 }
 
 test.describe('assertValidZipFile', () => {
+  test('reports a missing file by path instead of a raw ENOENT', () => {
+    expect(() => assertValidZipFile('/no/such/dir/app.apk')).toThrow('App file not found: /no/such/dir/app.apk');
+  });
+
   test('accepts a file starting with the ZIP magic bytes', () => {
     const path = writeTempFile('app.apk', Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0]));
     expect(() => assertValidZipFile(path)).not.toThrow();
@@ -29,6 +34,21 @@ test.describe('assertValidZipFile', () => {
   test('rejects a file that is not a ZIP and names the path', () => {
     const path = writeTempFile('app.apk', Buffer.from('not a zip at all'));
     expect(() => assertValidZipFile(path)).toThrow(`"${path}" is not a valid ZIP file`);
+  });
+});
+
+test.describe('isRemoteAppReference', () => {
+  test('treats cloud storage references as remote', () => {
+    expect(isRemoteAppReference('storage:filename=app.apk')).toBe(true);
+    expect(isRemoteAppReference('storage:7f6e5d4c-1234')).toBe(true);
+    expect(isRemoteAppReference('bs://c700ce60cf13ae8ed97705a55b8e022f')).toBe(true);
+    expect(isRemoteAppReference('file:file-1')).toBe(true);
+  });
+
+  test('treats paths on disk as local', () => {
+    expect(isRemoteAppReference('/abs/path/app.apk')).toBe(false);
+    expect(isRemoteAppReference('./builds/app.apk')).toBe(false);
+    expect(isRemoteAppReference('app.zip')).toBe(false);
   });
 });
 
@@ -184,6 +204,10 @@ test.describe('resolveInstallAppPaths', () => {
 
   test('leaves an absolute path untouched', () => {
     expect(resolveInstallAppPaths('/tmp/app.apk', configDir)).toEqual(['/tmp/app.apk']);
+  });
+
+  test('leaves a remote app reference untouched', () => {
+    expect(resolveInstallAppPaths('bs://c700ce60cf13ae8ed97705a55b8e022f', configDir)).toEqual(['bs://c700ce60cf13ae8ed97705a55b8e022f']);
   });
 
   test('resolves every entry of an array', () => {
