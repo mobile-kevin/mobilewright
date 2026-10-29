@@ -1,6 +1,7 @@
 import { test as base, type TestInfo } from '@playwright/test';
 import { createWriteStream } from 'node:fs';
 import { mkdir, unlink } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import createDebug from 'debug';
@@ -8,7 +9,6 @@ import {
   createDevicePoolClient,
   connectDevice,
   loadConfig,
-  toArray,
   type DevicePoolClient,
   type AllocationCriteria,
   type AllocationHandle,
@@ -18,6 +18,7 @@ import { expect, setSoftFailureHandler, setDefaultStepFn } from '@mobilewright/c
 import type { Device, Screen, StepFn } from '@mobilewright/core';
 import {
   assertValidZipFile,
+  isRemoteAppReference,
   mergeDeviceConfig,
   assertSupportedPlatform,
   annotationsForDevice,
@@ -25,6 +26,7 @@ import {
   allocationTimeoutFor,
   videoPlan,
   parseViewTreeOption,
+  resolveInstallAppPaths,
 } from './fixture-helpers.js';
 
 const debug = createDebug('mw:test:fixtures');
@@ -136,8 +138,12 @@ export const test = base.extend<MobilewrightTestFixtures>({
     const merged = mergeDeviceConfig(config, { platform, deviceId, deviceName, deviceType, osVersion, installApps }, testInfo.project.name);
     const supportedPlatform = assertSupportedPlatform(merged.platform);
 
-    for (const appPath of toArray(merged.installApps)) {
-      assertValidZipFile(appPath);
+    const configDir = testInfo.config.configFile ? dirname(testInfo.config.configFile) : process.cwd();
+    const appsToInstall = resolveInstallAppPaths(merged.installApps, configDir);
+    for (const appPath of appsToInstall) {
+      if (!isRemoteAppReference(appPath)) {
+        assertValidZipFile(appPath);
+      }
     }
 
     const client = getClient();
@@ -148,6 +154,7 @@ export const test = base.extend<MobilewrightTestFixtures>({
       deviceId: merged.deviceId,
       deviceType: merged.deviceType,
       osVersion: merged.osVersion,
+      installApps: appsToInstall,
     }, allocationTimeoutFor(merged));
     debug('allocated device %s', handle.deviceId);
 
@@ -158,7 +165,7 @@ export const test = base.extend<MobilewrightTestFixtures>({
     debug('connected to device %s', handle.deviceId);
 
     try {
-      for (const appPath of toArray(merged.installApps)) {
+      for (const appPath of appsToInstall) {
         const installed = await client.isAppInstalled(handle.allocationId, appPath);
         if (!installed) {
           await device.installApp(appPath);
