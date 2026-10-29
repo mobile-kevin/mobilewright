@@ -1,7 +1,7 @@
 import { test, expect as playwrightExpect } from '@playwright/test';
 import type { WebViewSession } from '@mobilewright/protocol';
 import type { StepFn } from './locator.js';
-import { WebLocator } from './web-locator.js';
+import { WebLocator, pressKeyScript } from './web-locator.js';
 import { Page } from './page.js';
 import {
   getByRoleSelector,
@@ -14,6 +14,20 @@ import {
   TEST_ID_ATTR,
 } from './playwright-engine.js';
 import { fakeWebViewSession } from './fake-webview-session.js';
+
+// The parts of an HTML element that press()'s in-page script reads and writes.
+type FakeElement = {
+  tagName: string;
+  type?: string;
+  value: string;
+  readOnly?: boolean;
+  isContentEditable?: boolean;
+  selectionStart?: number | null;
+  selectionEnd?: number | null;
+  setSelectionRange?: (start: number, end: number) => void;
+  dispatchEvent: (event: unknown) => boolean;
+  getAttribute: (name: string) => string | null;
+};
 
 // A step function that records the title of every step it wraps, then runs the body.
 function recordingStepFn(): { stepFn: StepFn; titles: string[] } {
@@ -427,6 +441,64 @@ test.describe('WebLocator.press()', () => {
     const loc = new WebLocator(session, '#q');
     await loc.press('Enter');
     playwrightExpect(evaluateCalls[0]).toContain('checkElementStates');
+  });
+
+  function element(fields: Partial<FakeElement> & { tagName: string }): FakeElement {
+    const el: FakeElement = {
+      value: '',
+      dispatchEvent: () => true,
+      getAttribute: () => null,
+      ...fields,
+    };
+    el.setSelectionRange = (start, end) => { el.selectionStart = start; el.selectionEnd = end; };
+    return el;
+  }
+
+  function textInput(value: string, caret = value.length): FakeElement {
+    return element({ tagName: 'INPUT', type: 'text', value, selectionStart: caret, selectionEnd: caret });
+  }
+
+  // Run press()'s in-page script against a fake element, with stand-ins for the DOM event classes.
+  function pressOn(el: FakeElement, key: string): FakeElement {
+    class FakeEvent { constructor(public type: string, init?: object) { Object.assign(this, init); } }
+    new Function('el', 'KeyboardEvent', 'Event', pressKeyScript(key))(el, FakeEvent, FakeEvent);
+    return el;
+  }
+
+  test('a trailing + is the key itself, alone or after modifiers', () => {
+    playwrightExpect(pressOn(textInput('1'), '+').value).toBe('1+');
+    playwrightExpect(pressOn(textInput('1'), 'Shift++').value).toBe('1+');
+    playwrightExpect(pressKeyScript('Shift++')).toContain('shiftKey: true');
+  });
+
+  test('printable keys do not change the value of a checkbox or a read-only field', () => {
+    const checkbox = element({ tagName: 'INPUT', type: 'checkbox', value: 'on' });
+    playwrightExpect(pressOn(checkbox, 'a').value).toBe('on');
+    const readOnly = element({ tagName: 'INPUT', type: 'text', value: 'fixed', readOnly: true });
+    playwrightExpect(pressOn(readOnly, 'a').value).toBe('fixed');
+    playwrightExpect(pressOn(readOnly, 'Backspace').value).toBe('fixed');
+  });
+
+  test('Backspace deletes the character before the caret and leaves the caret there', () => {
+    const input = pressOn(textInput('abcd', 2), 'Backspace');
+    playwrightExpect(input.value).toBe('acd');
+    playwrightExpect(input.selectionStart).toBe(1);
+  });
+
+  test('Backspace deletes the selected text', () => {
+    const input = element({ tagName: 'INPUT', type: 'text', value: 'abcdef', selectionStart: 1, selectionEnd: 4 });
+    pressOn(input, 'Backspace');
+    playwrightExpect(input.value).toBe('aef');
+    playwrightExpect(input.selectionStart).toBe(1);
+  });
+
+  test('Backspace at the start of the field deletes nothing', () => {
+    playwrightExpect(pressOn(textInput('abc', 0), 'Backspace').value).toBe('abc');
+  });
+
+  test('Backspace in an input without a selection API deletes the last character', () => {
+    const email = element({ tagName: 'INPUT', type: 'email', value: 'a@b.co', selectionStart: null, selectionEnd: null });
+    playwrightExpect(pressOn(email, 'Backspace').value).toBe('a@b.c');
   });
 });
 

@@ -69,9 +69,12 @@ const KEY_CODES: Record<string, number> = {
 };
 
 // Playwright key syntax: "Shift+Enter", "Control+a", "Meta+ArrowLeft", "a".
+// A trailing "+" is the key itself: "+" and "Shift++" both press "+".
 function parseKeyChord(chord: string): { key: string; alt: boolean; ctrl: boolean; meta: boolean; shift: boolean } {
-  const parts = chord.split('+');
-  const key = parts.pop() ?? chord;
+  const plusIsKey = chord.endsWith('+');
+  const parts = (plusIsKey ? chord.slice(0, -1) : chord).split('+');
+  const lastPart = parts.pop() ?? chord;
+  const key = plusIsKey ? '+' : lastPart;
   const has = (name: string): boolean => parts.includes(name);
   return {
     key,
@@ -87,8 +90,10 @@ function parseKeyChord(chord: string): { key: string; alt: boolean; ctrl: boolea
 // a synthetic (untrusted) KeyboardEvent never triggers the browser's own:
 // Enter submits the field's form (or inserts a newline in a textarea, or
 // activates a button), Backspace deletes, printable keys insert their
-// character. Handlers can still veto via preventDefault() on keydown.
-function pressKeyScript(chord: string): string {
+// character. Handlers can still veto via preventDefault() on keydown. Only
+// text-entry inputs, textareas and contenteditable elements that are not
+// read-only take text; Backspace honors the caret and selection.
+export function pressKeyScript(chord: string): string {
   const { key, alt, ctrl, meta, shift } = parseKeyChord(chord);
   const keyCode = KEY_CODES[key] ?? (key.length === 1 ? key.toUpperCase().charCodeAt(0) : 0);
   const code = key.length === 1 ? (/[a-z]/i.test(key) ? `Key${key.toUpperCase()}` : /[0-9]/.test(key) ? `Digit${key}` : '') : key;
@@ -101,17 +106,33 @@ const keyPressAllowed = keyDownAllowed && init.key.length === 1
   : keyDownAllowed;
 if (keyPressAllowed && !init.defaultPrevented) {
   const tag = el.tagName;
-  const editable = tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+  const textInputTypes = ['text', 'search', 'email', 'url', 'tel', 'password', 'number'];
+  const editable = el.isContentEditable
+    || ((tag === 'TEXTAREA' || (tag === 'INPUT' && textInputTypes.includes(el.type))) && !el.readOnly);
   const desc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value');
   const current = () => el.isContentEditable ? (el.textContent || '') : (el.value || '');
-  const setValue = (v) => { if (el.isContentEditable) { el.textContent = v; } else if (desc && desc.set) { desc.set.call(el, v); } else { el.value = v; } el.dispatchEvent(new Event('input', { bubbles: true })); };
+  const assignValue = (v) => { if (el.isContentEditable) { el.textContent = v; } else if (desc && desc.set) { desc.set.call(el, v); } else { el.value = v; } };
+  const fireInput = () => el.dispatchEvent(new Event('input', { bubbles: true }));
+  const setValue = (v) => { assignValue(v); fireInput(); };
   const plain = !init.altKey && !init.ctrlKey && !init.metaKey;
   if (init.key === 'Enter') {
-    if (tag === 'TEXTAREA' || el.isContentEditable) { setValue(current() + '\\n'); }
+    if (editable && (tag === 'TEXTAREA' || el.isContentEditable)) { setValue(current() + '\\n'); }
     else if (!init.shiftKey && tag === 'INPUT' && el.form) { if (el.form.requestSubmit) { el.form.requestSubmit(); } else { el.form.submit(); } }
     else if (!init.shiftKey && (tag === 'BUTTON' || tag === 'A' || el.getAttribute('role') === 'button')) { el.click(); }
   } else if (init.key === 'Backspace' && editable && plain) {
-    setValue(current().slice(0, -1));
+    // email/number inputs report a null selection; contenteditable has none
+    const hasCaret = !el.isContentEditable && typeof el.selectionStart === 'number' && typeof el.selectionEnd === 'number';
+    if (hasCaret) {
+      const value = current();
+      const start = el.selectionStart;
+      const end = el.selectionEnd;
+      const from = start === end ? Math.max(0, start - 1) : start;
+      assignValue(value.slice(0, from) + value.slice(end));
+      el.setSelectionRange(from, from);
+      fireInput();
+    } else {
+      setValue(current().slice(0, -1));
+    }
   } else if ((init.key === ' ' || init.key === 'Space') && plain) {
     if (tag === 'BUTTON' || (tag === 'INPUT' && (el.type === 'checkbox' || el.type === 'radio'))) { el.click(); }
     else if (editable) { setValue(current() + ' '); }
