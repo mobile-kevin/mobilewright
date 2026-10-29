@@ -1,6 +1,7 @@
 import createDebug from 'debug';
 import { execFileSync } from 'node:child_process';
-import { openSync, readSync, closeSync } from 'node:fs';
+import { existsSync, openSync, readSync, closeSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type {
   AllocatedDevice,
   AllocationCriteria,
@@ -185,6 +186,9 @@ function elementToViewNode(el: MobilecliElement): ViewNode {
 const ZIP_MAGIC = Buffer.from([0x50, 0x4B, 0x03, 0x04]);
 
 function assertValidZipFile(path: string): void {
+  if (!existsSync(path)) {
+    throw new Error(`App file not found: ${path}`);
+  }
   const buf = Buffer.alloc(4);
   const fd = openSync(path, 'r');
   try {
@@ -517,9 +521,10 @@ export class MobilecliDriver implements MobilewrightSession, DeviceAllocator {
     await this.call('device.io.keys', { keys });
   }
 
-  async clearText(): Promise<void> {
-    const selectAll = this.requireSession().platform === 'ios' ? 'cmd+a' : 'ctrl+a';
-    await this.pressKeys([selectAll, 'backspace']);
+  async fill(text: string): Promise<void> {
+    // mobilecli sets the text through accessibility on Android, which doesn't race a Compose
+    // TextField moving its cursor after focus; on iOS it presses the HID clear key, then types
+    await this.call('device.io.fill', { text });
   }
 
   async swipe(direction: SwipeDirection, opts?: SwipeOptions): Promise<void> {
@@ -673,6 +678,11 @@ export class MobilecliDriver implements MobilewrightSession, DeviceAllocator {
       && /failed to execute xcrun simctl command: exit status 3$/.test(message);
   }
 
+  async clearAppData(bundleId: string): Promise<void> {
+    debug('clearing data of %s', bundleId);
+    await this.call('device.apps.clear', { bundleId });
+  }
+
   async listApps(): Promise<AppInfo[]> {
     // iOS returns a flat array, Android returns { apps: [...] }. Support both
     // until the Android mobilecli response is aligned.
@@ -724,13 +734,22 @@ export class MobilecliDriver implements MobilewrightSession, DeviceAllocator {
       }
     }
 
-    assertValidZipFile(path);
-    debug('installing %s', path);
-    await this.call('device.apps.install', { path });
-    debug('installed %s', path);
+    // The server resolves a relative path against ITS cwd, so send an absolute one.
+    const absolutePath = resolve(path);
+    assertValidZipFile(absolutePath);
+    debug('installing %s', absolutePath);
+    await this.call('device.apps.install', { path: absolutePath });
+    debug('installed %s', absolutePath);
   }
 
   async uninstallApp(bundleId: string): Promise<void> {
+    // Removing an app that is not installed is not an error: real iOS already
+    // resolves, Android would answer `Failure [DELETE_FAILED_INTERNAL_ERROR]`.
+    const installed = (await this.listApps()).some((app) => app.bundleId === bundleId);
+    if (!installed) {
+      debug('%s is not installed, nothing to uninstall', bundleId);
+      return;
+    }
     await this.call('device.apps.uninstall', { bundleId });
   }
 

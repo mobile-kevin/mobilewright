@@ -45,6 +45,8 @@ export interface AllocationCriteria {
   deviceType?: DeviceType;
   /** OS version constraint expression, e.g. "17", "26.0" or ">=17 <19". See `parseOsVersion`. */
   osVersion?: string;
+  /** App paths to install. A driver that installs while allocating reports them in `installedApps`; others ignore this. */
+  installApps?: string[];
 }
 
 export interface AllocatedDevice {
@@ -55,6 +57,8 @@ export interface AllocatedDevice {
   model?: string;
   osVersion?: string;
   type?: DeviceType;
+  /** Apps from `criteria.installApps` that the driver installed while allocating. */
+  installedApps?: string[];
 }
 
 export interface WebViewSession {
@@ -150,8 +154,8 @@ export interface MobilewrightSession {
   typeText(text: string): Promise<void>;
   /** Press one or more key combinations in order, e.g. ["ctrl+a", "backspace"]. */
   pressKeys(keys: string[]): Promise<void>;
-  /** Clear the currently-focused text field, using the platform's select-all chord. */
-  clearText(): Promise<void>;
+  /** Replace the text of the currently-focused field in one step; '' clears it. */
+  fill(text: string): Promise<void>;
   /** Swipe in the given direction, optionally from a start point and with extra options. */
   swipe(direction: SwipeDirection, opts?: SwipeOptions): Promise<void>;
   /** Perform a custom multi-touch gesture sequence. */
@@ -178,6 +182,8 @@ export interface MobilewrightSession {
   launchApp(bundleId: string, opts?: LaunchOptions): Promise<void>;
   /** Terminate the running app with the given bundle id. */
   terminateApp(bundleId: string): Promise<void>;
+  /** Clear the app's data. On Android this also resets its runtime permissions. */
+  clearAppData(bundleId: string): Promise<void>;
   /** List the apps installed on the device. */
   listApps(): Promise<AppInfo[]>;
   /** Return the app currently in the foreground. */
