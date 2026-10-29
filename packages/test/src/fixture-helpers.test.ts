@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { writeFileSync, mkdtempSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   assertValidZipFile,
+  isRemoteAppReference,
   mergeDeviceConfig,
   assertSupportedPlatform,
   annotationsForDevice,
@@ -11,6 +12,7 @@ import {
   allocationTimeoutFor,
   videoPlan,
   parseViewTreeOption,
+  resolveInstallAppPaths,
 } from './fixture-helpers.js';
 
 function writeTempFile(name: string, bytes: Buffer): string {
@@ -20,6 +22,10 @@ function writeTempFile(name: string, bytes: Buffer): string {
 }
 
 test.describe('assertValidZipFile', () => {
+  test('reports a missing file by path instead of a raw ENOENT', () => {
+    expect(() => assertValidZipFile('/no/such/dir/app.apk')).toThrow('App file not found: /no/such/dir/app.apk');
+  });
+
   test('accepts a file starting with the ZIP magic bytes', () => {
     const path = writeTempFile('app.apk', Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0]));
     expect(() => assertValidZipFile(path)).not.toThrow();
@@ -28,6 +34,21 @@ test.describe('assertValidZipFile', () => {
   test('rejects a file that is not a ZIP and names the path', () => {
     const path = writeTempFile('app.apk', Buffer.from('not a zip at all'));
     expect(() => assertValidZipFile(path)).toThrow(`"${path}" is not a valid ZIP file`);
+  });
+});
+
+test.describe('isRemoteAppReference', () => {
+  test('treats cloud storage references as remote', () => {
+    expect(isRemoteAppReference('storage:filename=app.apk')).toBe(true);
+    expect(isRemoteAppReference('storage:7f6e5d4c-1234')).toBe(true);
+    expect(isRemoteAppReference('bs://c700ce60cf13ae8ed97705a55b8e022f')).toBe(true);
+    expect(isRemoteAppReference('file:file-1')).toBe(true);
+  });
+
+  test('treats paths on disk as local', () => {
+    expect(isRemoteAppReference('/abs/path/app.apk')).toBe(false);
+    expect(isRemoteAppReference('./builds/app.apk')).toBe(false);
+    expect(isRemoteAppReference('app.zip')).toBe(false);
   });
 });
 
@@ -166,5 +187,35 @@ test.describe('parseViewTreeOption', () => {
 
   test('rejects any other value', () => {
     expect(() => parseViewTreeOption('always')).toThrow('Invalid viewTree value: "always"');
+  });
+});
+
+// `installApps` paths are configured relative to the project, but the worker's
+// cwd and the mobilecli server's cwd can both differ from the config directory
+// (e.g. `--config path/to/mobilewright.config.ts`, or a server started from
+// another folder). Resolve them against the config file's directory, as
+// Playwright does for its own path options, so an absolute path reaches the driver.
+test.describe('resolveInstallAppPaths', () => {
+  const configDir = '/projects/shop';
+
+  test('resolves a relative path against the config directory', () => {
+    expect(resolveInstallAppPaths('./builds/app.zip', configDir)).toEqual([resolve('/projects/shop/builds/app.zip')]);
+  });
+
+  test('leaves an absolute path untouched', () => {
+    expect(resolveInstallAppPaths('/tmp/app.apk', configDir)).toEqual([resolve('/tmp/app.apk')]);
+  });
+
+  test('leaves a remote app reference untouched', () => {
+    expect(resolveInstallAppPaths('bs://c700ce60cf13ae8ed97705a55b8e022f', configDir)).toEqual(['bs://c700ce60cf13ae8ed97705a55b8e022f']);
+  });
+
+  test('resolves every entry of an array', () => {
+    expect(resolveInstallAppPaths(['ios/App.zip', '/abs/other.apk'], configDir))
+      .toEqual([resolve('/projects/shop/ios/App.zip'), resolve('/abs/other.apk')]);
+  });
+
+  test('returns an empty list when nothing is configured', () => {
+    expect(resolveInstallAppPaths(undefined, configDir)).toEqual([]);
   });
 });
