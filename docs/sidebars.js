@@ -37,6 +37,7 @@ const sidebars = {
         'guides/assertions',
         'guides/auto-waiting',
         'guides/deep-links',
+        'guides/dialogs',
         'guides/docker',
         'guides/geolocation',
         'guides/inspector',
@@ -62,6 +63,8 @@ const sidebars = {
         'cloud-providers/index',
         'cloud-providers/mobile-next-cloud',
         'cloud-providers/browserstack',
+        'cloud-providers/testingbot',
+        'cloud-providers/saucelabs',
       ],
     },
     {
@@ -71,6 +74,7 @@ const sidebars = {
       items: [
         'integrations/datadog',
         'integrations/checkly',
+        'integrations/allure',
       ],
     },
     'changelog',

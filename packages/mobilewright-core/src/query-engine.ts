@@ -116,9 +116,11 @@ function matchesStrategy(
     case 'root':
       return true;
 
-    case 'label':
-      if (!node.label) return false;
-      return textMatches(node.label, strategy.value, strategy.exact);
+    case 'label': {
+      const label = labelOf(node);
+      if (!label) return false;
+      return textMatches(label, strategy.value, strategy.exact);
+    }
 
     case 'testId':
       if (node.key === strategy.value) {
@@ -152,7 +154,9 @@ function matchesStrategy(
         // Accessible-name order (label before text) is intentionally the reverse of
         // the `text` locator above: an explicit label/accessibilityLabel outranks
         // displayed text, mirroring ARIA accessible-name computation.
-        const nodeLabel = node.label ?? node.text ?? '';
+        const nodeLabel = NAME_FROM_CONTENT_ROLES.has(strategy.value.toLowerCase())
+          ? accessibleName(node)
+          : labelOf(node) ?? node.text ?? '';
         return textMatches(nodeLabel, strategy.name, strategy.exact);
       }
       return true;
@@ -223,7 +227,52 @@ export function bareTypeName(type: string): string {
     : afterPackage;
 }
 
-function matchesRole(node: ViewNode, role: string): boolean {
+/** Roles that ARIA lets take their name from their content; a list or a text field never does. */
+const NAME_FROM_CONTENT_ROLES = new Set(['button', 'link', 'tab', 'header', 'switch', 'checkbox', 'radio']);
+
+/**
+ * The name a name-from-content role matches against: the node's own label, then its own text,
+ * then the text of its descendants. The last step mirrors ARIA's name-from-content,
+ * and covers Jetpack Compose buttons, which keep their caption on a child node.
+ */
+export function accessibleName(node: ViewNode): string {
+  const ownName = node.label || node.text;
+  if (ownName) {
+    return ownName;
+  }
+  return node.children
+    .map(accessibleName)
+    .filter((name) => name !== '')
+    .join(' ');
+}
+
+/**
+ * A node's label. A text field without one is labelled by its children, which is
+ * where a Jetpack Compose TextField keeps its floating label.
+ */
+function labelOf(node: ViewNode): string | undefined {
+  if (node.label || !matchesRole(node, 'textfield')) {
+    return node.label;
+  }
+  return node.children.map(accessibleName).filter((name) => name !== '').join(' ') || undefined;
+}
+
+/** mobilecli reports clickable as a boolean, Appium-style drivers as a string. */
+export function isClickable(node: ViewNode): boolean {
+  return node.raw?.['clickable'] === true || node.raw?.['clickable'] === 'true';
+}
+
+/**
+ * Material3 marks an AlertDialog's container with the pane title "Dialog"; it is the only
+ * sign of a Compose dialog, which has none of android.app.AlertDialog's ids.
+ */
+export function isComposeDialogPane(node: ViewNode): boolean {
+  // ponytail: Material3's English string, so other locales go undetected; match the localized
+  // m3c_dialog string if that matters
+  return node.raw?.['paneTitle'] === 'Dialog';
+}
+
+export function matchesRole(node: ViewNode, role: string): boolean {
   const normalizedType = bareTypeName(node.type);
   // ROLE_TYPE_MAP is `as const`, so its keys are a closed union; widen for the
   // arbitrary caller-supplied role, and keep `| undefined` explicit because
@@ -237,6 +286,16 @@ function matchesRole(node: ViewNode, role: string): boolean {
       return node.raw?.['clickable'] === 'true' || node.raw?.['accessible'] === 'true';
     }
     return false;
+  }
+
+  if (role.toLowerCase() === 'alert' && isComposeDialogPane(node)) {
+    return true;
+  }
+
+  // Jetpack Compose only reports android.widget.Button for a button without
+  // children, so a Button { Text(...) } shows up as a clickable plain View.
+  if (normalizedType === 'view' && role.toLowerCase() === 'button') {
+    return isClickable(node);
   }
 
   if (roleTypes) {
